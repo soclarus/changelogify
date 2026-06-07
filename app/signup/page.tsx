@@ -1,35 +1,40 @@
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 
-export default function Login({
+export default function Signup({
   searchParams,
 }: {
   searchParams: { message: string }
 }) {
-  const signIn = async (formData: FormData) => {
+  const signUp = async (formData: FormData) => {
     'use server'
 
+    const origin = headers().get('origin')
     const email = formData.get('email') as string
     const password = formData.get('password') as string
     const supabase = createClient()
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: `${origin}/auth/callback`,
+      },
     })
 
     if (error) {
-      return redirect(`/login?message=${encodeURIComponent(error.message)}`)
+      return redirect(`/signup?message=${encodeURIComponent(error.message)}`)
     }
 
-    return redirect('/')
+    return redirect('/signup?message=Check email to continue sign in process')
   }
 
   return (
     <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 py-24 mx-auto">
       <Link
-        href="/"
+        href="/login"
         className="absolute left-8 top-8 py-2 px-4 rounded-md no-underline text-foreground bg-btn-background hover:bg-btn-background-hover flex items-center group text-sm"
       >
         <svg
@@ -46,14 +51,14 @@ export default function Login({
         >
           <polyline points="15 18 9 12 15 6" />
         </svg>{' '}
-        Back
+        Back to Login
       </Link>
 
       <form
         className="animate-in flex-1 flex flex-col w-full justify-center gap-2 text-foreground"
-        action={signIn}
+        action={signUp}
       >
-        <h1 className="text-2xl font-bold mb-6">Sign In</h1>
+        <h1 className="text-2xl font-bold mb-6">Create an account</h1>
         <label className="text-md" htmlFor="email">
           Email
         </label>
@@ -63,17 +68,9 @@ export default function Login({
           placeholder="you@example.com"
           required
         />
-        <div className="flex justify-between items-center">
-          <label className="text-md" htmlFor="password">
-            Password
-          </label>
-          <Link
-            href="/forgot-password"
-            className="text-sm text-foreground/60 hover:underline"
-          >
-            Forgot?
-          </Link>
-        </div>
+        <label className="text-md" htmlFor="password">
+          Password
+        </label>
         <input
           className="rounded-md px-4 py-2 bg-inherit border mb-6"
           type="password"
@@ -82,12 +79,12 @@ export default function Login({
           required
         />
         <button className="bg-green-700 rounded-md px-4 py-2 text-foreground mb-2">
-          Sign In
+          Sign Up
         </button>
         <p className="text-sm text-center mt-2">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="underline font-medium">
-            Sign Up
+          Already have an account?{' '}
+          <Link href="/login" className="underline font-medium">
+            Log In
           </Link>
         </p>
         {searchParams?.message && (
