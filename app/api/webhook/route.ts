@@ -15,7 +15,6 @@ interface AIConfig {
   supports_json_mode: boolean;
 }
 
-// Get all possible AI configurations in order of preference
 const getAIConfigs = (): AIConfig[] => {
   const configs: AIConfig[] = [];
 
@@ -32,7 +31,7 @@ const getAIConfigs = (): AIConfig[] => {
   if (process.env.OPENAI_API_KEY) {
     configs.push({
       apiKey: process.env.OPENAI_API_KEY,
-      baseURL: undefined, // Default OpenAI base URL
+      baseURL: undefined,
       model: 'gpt-4o-mini',
       name: 'OpenAI',
       supports_json_mode: true
@@ -44,9 +43,15 @@ const getAIConfigs = (): AIConfig[] => {
 
 export async function POST(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('user_id');
+
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing user_id query parameter' }, { status: 400 });
+    }
+
     const payload = await req.json();
     
-    // Only process Pull Request 'closed' events where the PR was merged
     if (payload.action !== 'closed' || !payload.pull_request?.merged) {
       return NextResponse.json({ message: 'Not a merged PR event, skipping' });
     }
@@ -108,21 +113,19 @@ export async function POST(req: Request) {
         summaries = JSON.parse(jsonString);
         success = true;
         lastUsedProvider = config.name;
-        break; // Stop at the first successful provider
+        break;
       } catch (aiError) {
-        console.error(`${config.name} Error, trying next provider...`, aiError);
+        console.error(\`\${config.name} Error, trying next provider...\`, aiError);
       }
     }
 
-    // Final fallback to mock if no AI provider succeeded
     if (!success) {
       summaries = {
-        technical_summary: `[MOCK] Technical: ${prTitle}. PR #${pr.number} merged into main.`,
-        client_summary: `[MOCK] Client: We added a new feature: ${prTitle}. Check it out!`
+        technical_summary: \`[MOCK] Technical: \${prTitle}. PR #\${pr.number} merged into main.\`,
+        client_summary: \`[MOCK] Client: We added a new feature: \${prTitle}. Check it out!\`
       };
     }
 
-    // Save to Supabase
     const { data, error } = await supabase
       .from('changelogs')
       .insert([
@@ -132,6 +135,7 @@ export async function POST(req: Request) {
           title: prTitle,
           technical_summary: summaries.technical_summary,
           client_summary: summaries.client_summary,
+          user_id: userId,
         },
       ]);
 
