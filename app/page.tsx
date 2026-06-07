@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { ChevronDown, ChevronUp, GitBranch, Clock } from "lucide-react";
 
@@ -26,10 +26,12 @@ interface Changelog {
   pr_number: number;
   client_summary: string;
   technical_summary: string;
+  github_repo: string;
 }
 
 export default function Dashboard() {
   const [changelogs, setChangelogs] = useState<Changelog[]>([]);
+  const [selectedRepo, setSelectedRepo] = useState<string>("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,13 +56,40 @@ export default function Dashboard() {
     fetchChangelogs();
   }, []);
 
+  const repos = useMemo(() => {
+    const uniqueRepos = Array.from(new Set(changelogs.map(log => log.github_repo).filter(Boolean)));
+    return ["All", ...uniqueRepos];
+  }, [changelogs]);
+
+  const filteredChangelogs = useMemo(() => {
+    if (selectedRepo === "All") return changelogs;
+    return changelogs.filter(log => log.github_repo === selectedRepo);
+  }, [changelogs, selectedRepo]);
+
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-gray-100 p-8">
       <div className="max-w-4xl mx-auto">
-        <header className="mb-12">
+        <header className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-2">Product Updates</h1>
           <p className="text-gray-400">The latest improvements and fixes to Changelogify.</p>
         </header>
+
+        {/* Tabs for filtering */}
+        <div className="flex flex-wrap gap-2 mb-12 border-b border-gray-800 pb-4">
+          {repos.map(repo => (
+            <button
+              key={repo}
+              onClick={() => setSelectedRepo(repo)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                selectedRepo === repo
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-900 text-gray-400 hover:bg-gray-800"
+              }`}
+            >
+              {repo}
+            </button>
+          ))}
+        </div>
 
         {error && (
           <div className="p-4 mb-8 text-sm text-red-400 bg-red-900/20 border border-red-900/50 rounded-lg">
@@ -69,7 +98,7 @@ export default function Dashboard() {
         )}
 
         <div className="space-y-8">
-          {changelogs.map((log) => (
+          {filteredChangelogs.map((log) => (
             <div key={log.id} className="relative pl-8 border-l border-gray-800">
               <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-blue-500 border-4 border-[#0a0a0a]" />
               
@@ -84,10 +113,20 @@ export default function Dashboard() {
                         day: 'numeric' 
                       })}
                     </span>
-                    <span className="flex items-center gap-1">
+                    <a
+                      href={`https://github.com/${log.github_repo}/pull/${log.pr_number}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 hover:text-blue-400 transition-colors"
+                    >
                       <GitBranch size={14} />
                       PR #{log.pr_number}
-                    </span>
+                    </a>
+                    {log.github_repo && (
+                      <span className="px-2 py-0.5 rounded bg-gray-800 text-[10px] font-bold uppercase tracking-wider">
+                        {log.github_repo.split('/')[1] || log.github_repo}
+                      </span>
+                    )}
                   </div>
 
                   <h2 className="text-2xl font-semibold mb-4 leading-snug">
