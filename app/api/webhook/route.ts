@@ -40,8 +40,8 @@ export async function POST(req: Request) {
           1. A "Technical Summary" for developers (brief, concise, technical).
           2. A "Client Summary" for non-technical stakeholders (friendly, focus on value/features, no jargon).
 
-          PR Title: \${prTitle}
-          PR Body: \${prBody}
+          PR Title: ${prTitle}
+          PR Body: ${prBody}
 
           Return your response in the following JSON format:
           {
@@ -63,15 +63,15 @@ export async function POST(req: Request) {
       } catch (aiError) {
         console.error('OpenAI Error, falling back to mock:', aiError);
         summaries = {
-          technical_summary: \`Mock technical summary for: \${prTitle}. Details: \${prBody.substring(0, 100)}...\`,
-          client_summary: \`We improved the project by adding: \${prTitle}. This update makes the experience smoother for all users.\`
+          technical_summary: `Mock technical summary for: ${prTitle}. Details: ${prBody.substring(0, 100)}...`,
+          client_summary: `We improved the project by adding: ${prTitle}. This update makes the experience smoother for all users.`
         };
       }
     } else {
       // Graceful fallback for testing without API key
       summaries = {
-        technical_summary: \`[MOCK] Technical: \${prTitle}. PR #\${pr.number} merged into main.\`,
-        client_summary: \`[MOCK] Client: We added a new feature: \${prTitle}. Check it out!\`
+        technical_summary: `[MOCK] Technical: ${prTitle}. PR #${pr.number} merged into main.`,
+        client_summary: `[MOCK] Client: We added a new feature: ${prTitle}. Check it out!`
       };
     }
 
