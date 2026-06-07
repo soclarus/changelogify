@@ -22,7 +22,7 @@ const getAIConfig = () => {
     return {
       apiKey: process.env.OPENROUTER_API_KEY,
       baseURL: 'https://openrouter.ai/api/v1',
-      model: 'google/gemini-2.0-flash-lite-preview:free',
+      model: 'google/gemini-2.0-flash-lite-preview-02-05:free',
       name: 'OpenRouter',
       // Some OpenRouter models (especially free/flash ones) might not strictly support response_format: { type: 'json_object' } 
       // or require specific headers. We will handle headers in the constructor and 
