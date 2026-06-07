@@ -7,9 +7,39 @@ const supabaseUrl = 'https://dfeumsaeaoplyztmwxpn.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''; 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Initialize OpenAI client
+// Dynamic Provider Configuration
+const getAIConfig = () => {
+  if (process.env.GROQ_API_KEY) {
+    return {
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: 'https://api.groq.com/openai/v1',
+      model: 'llama3-8b-8192',
+      name: 'Groq'
+    };
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    return {
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1',
+      model: 'google/gemini-flash-1.5',
+      name: 'OpenRouter'
+    };
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return {
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: undefined, // Default OpenAI base URL
+      model: 'gpt-4o-mini',
+      name: 'OpenAI'
+    };
+  }
+  return null;
+};
+
+const aiConfig = getAIConfig();
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'mock-key', // Use dummy key if missing
+  apiKey: aiConfig?.apiKey || 'mock-key',
+  baseURL: aiConfig?.baseURL,
 });
 
 export async function POST(req: Request) {
@@ -31,8 +61,8 @@ export async function POST(req: Request) {
       client_summary: ''
     };
 
-    // Attempt to generate summaries using OpenAI
-    if (process.env.OPENAI_API_KEY) {
+    // Attempt to generate summaries using the configured AI provider
+    if (aiConfig) {
       try {
         const prompt = `
           You are a product manager assistant. I will provide you with a GitHub Pull Request title and description.
@@ -51,7 +81,7 @@ export async function POST(req: Request) {
         `;
 
         const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
+          model: aiConfig.model,
           messages: [
             { role: 'system', content: 'You are a helpful assistant that summarizes code changes.' },
             { role: 'user', content: prompt }
@@ -61,14 +91,14 @@ export async function POST(req: Request) {
 
         summaries = JSON.parse(completion.choices[0].message.content || '{}');
       } catch (aiError) {
-        console.error('OpenAI Error, falling back to mock:', aiError);
+        console.error(`${aiConfig.name} Error, falling back to mock:`, aiError);
         summaries = {
           technical_summary: `Mock technical summary for: ${prTitle}. Details: ${prBody.substring(0, 100)}...`,
           client_summary: `We improved the project by adding: ${prTitle}. This update makes the experience smoother for all users.`
         };
       }
     } else {
-      // Graceful fallback for testing without API key
+      // Graceful fallback for testing without any API keys
       summaries = {
         technical_summary: `[MOCK] Technical: ${prTitle}. PR #${pr.number} merged into main.`,
         client_summary: `[MOCK] Client: We added a new feature: ${prTitle}. Check it out!`
@@ -93,7 +123,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to save to database' }, { status: 500 });
     }
 
-    return NextResponse.json({ message: 'Changelog processed successfully', data, mode: process.env.OPENAI_API_KEY ? 'live' : 'mock' });
+    return NextResponse.json({ 
+      message: 'Changelog processed successfully', 
+      data, 
+      mode: aiConfig ? aiConfig.name : 'mock' 
+    });
   } catch (err: any) {
     console.error('Webhook Error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
