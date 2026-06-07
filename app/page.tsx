@@ -2,12 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ChevronDown, ChevronUp, Package, Clock, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, Package, Clock } from "lucide-react";
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Mark route as dynamic to prevent build-time crashes if env vars are missing
+export const dynamic = "force-dynamic";
+
+// Supabase client factory to handle missing environment variables gracefully
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return null;
+  }
+  return createClient(supabaseUrl, supabaseKey);
+};
+
+const supabase = getSupabaseClient();
 
 interface Changelog {
   id: string;
@@ -20,16 +31,25 @@ interface Changelog {
 export default function Dashboard() {
   const [changelogs, setChangelogs] = useState<Changelog[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchChangelogs() {
-      const { data, error } = await supabase
+      if (!supabase) {
+        setError("Supabase environment variables are missing.");
+        return;
+      }
+
+      const { data, error: supabaseError } = await supabase
         .from("changelogs")
         .select("*")
         .order("created_at", { ascending: false });
 
       if (data) setChangelogs(data);
-      if (error) console.error("Error fetching changelogs:", error);
+      if (supabaseError) {
+        console.error("Error fetching changelogs:", supabaseError);
+        setError("Failed to load changelogs.");
+      }
     }
     fetchChangelogs();
   }, []);
@@ -41,6 +61,12 @@ export default function Dashboard() {
           <h1 className="text-4xl font-bold tracking-tight mb-2">Product Updates</h1>
           <p className="text-gray-400">The latest improvements and fixes to Changelogify.</p>
         </header>
+
+        {error && (
+          <div className="p-4 mb-8 text-sm text-red-400 bg-red-900/20 border border-red-900/50 rounded-lg">
+            {error}
+          </div>
+        )}
 
         <div className="space-y-8">
           {changelogs.map((log) => (
