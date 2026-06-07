@@ -14,15 +14,20 @@ const getAIConfig = () => {
       apiKey: process.env.GROQ_API_KEY,
       baseURL: 'https://api.groq.com/openai/v1',
       model: 'llama3-8b-8192',
-      name: 'Groq'
+      name: 'Groq',
+      supports_json_mode: true
     };
   }
   if (process.env.OPENROUTER_API_KEY) {
     return {
       apiKey: process.env.OPENROUTER_API_KEY,
       baseURL: 'https://openrouter.ai/api/v1',
-      model: 'google/gemini-flash-1.5',
-      name: 'OpenRouter'
+      model: 'google/gemini-2.0-flash-lite:free',
+      name: 'OpenRouter',
+      // Some OpenRouter models (especially free/flash ones) might not strictly support response_format: { type: 'json_object' } 
+      // or require specific headers. We will handle headers in the constructor and 
+      // check for JSON mode support.
+      supports_json_mode: false 
     };
   }
   if (process.env.OPENAI_API_KEY) {
@@ -30,16 +35,23 @@ const getAIConfig = () => {
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: undefined, // Default OpenAI base URL
       model: 'gpt-4o-mini',
-      name: 'OpenAI'
+      name: 'OpenAI',
+      supports_json_mode: true
     };
   }
   return null;
 };
 
 const aiConfig = getAIConfig();
+
+// Initialize OpenAI client with necessary OpenRouter headers if applicable
 const openai = new OpenAI({
   apiKey: aiConfig?.apiKey || 'mock-key',
   baseURL: aiConfig?.baseURL,
+  defaultHeaders: aiConfig?.name === 'OpenRouter' ? {
+    'HTTP-Referer': 'https://changelogify.soclarus.com', // Optional, for OpenRouter rankings
+    'X-Title': 'Changelogify', // Optional, for OpenRouter rankings
+  } : undefined,
 });
 
 export async function POST(req: Request) {
@@ -73,7 +85,7 @@ export async function POST(req: Request) {
           PR Title: ${prTitle}
           PR Body: ${prBody}
 
-          Return your response in the following JSON format:
+          Return your response in EXACTLY the following JSON format:
           {
             "technical_summary": "...",
             "client_summary": "..."
@@ -83,13 +95,20 @@ export async function POST(req: Request) {
         const completion = await openai.chat.completions.create({
           model: aiConfig.model,
           messages: [
-            { role: 'system', content: 'You are a helpful assistant that summarizes code changes.' },
+            { role: 'system', content: 'You are a helpful assistant that summarizes code changes and always responds in valid JSON.' },
             { role: 'user', content: prompt }
           ],
-          response_format: { type: 'json_object' }
+          // Only use response_format if the provider explicitly supports it to avoid 400 errors
+          ...(aiConfig.supports_json_mode ? { response_format: { type: 'json_object' } } : {})
         });
 
-        summaries = JSON.parse(completion.choices[0].message.content || '{}');
+        const content = completion.choices[0].message.content || '{}';
+        
+        // Robust JSON parsing: handle potential markdown blocks in non-JSON-mode responses
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : content;
+        
+        summaries = JSON.parse(jsonString);
       } catch (aiError) {
         console.error(`${aiConfig.name} Error, falling back to mock:`, aiError);
         summaries = {
