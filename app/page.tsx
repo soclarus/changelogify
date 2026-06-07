@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { ChevronDown, ChevronUp, Package, Clock } from "lucide-react";
+import { ChevronDown, ChevronUp, GitBranch, Clock } from "lucide-react";
 
 // Mark route as dynamic to prevent build-time crashes if env vars are missing
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ const supabase = getSupabaseClient();
 interface Changelog {
   id: string;
   created_at: string;
-  version: string;
+  pr_number: number;
   client_summary: string;
   technical_summary: string;
 }
@@ -85,8 +85,8 @@ export default function Dashboard() {
                       })}
                     </span>
                     <span className="flex items-center gap-1">
-                      <Package size={14} />
-                      v{log.version}
+                      <GitBranch size={14} />
+                      PR #{log.pr_number}
                     </span>
                   </div>
 
