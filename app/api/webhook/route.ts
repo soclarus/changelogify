@@ -19,16 +19,6 @@ interface AIConfig {
 const getAIConfigs = (): AIConfig[] => {
   const configs: AIConfig[] = [];
 
-  if (process.env.GROQ_API_KEY) {
-    configs.push({
-      apiKey: process.env.GROQ_API_KEY,
-      baseURL: 'https://api.groq.com/openai/v1',
-      model: 'llama3-8b-8192',
-      name: 'Groq',
-      supports_json_mode: true
-    });
-  }
-
   if (process.env.OPENROUTER_API_KEY) {
     configs.push({
       apiKey: process.env.OPENROUTER_API_KEY,
