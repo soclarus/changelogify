@@ -7,52 +7,50 @@ const supabaseUrl = 'https://dfeumsaeaoplyztmwxpn.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''; 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Dynamic Provider Configuration
-const getAIConfig = () => {
+interface AIConfig {
+  apiKey: string;
+  baseURL?: string;
+  model: string;
+  name: string;
+  supports_json_mode: boolean;
+}
+
+// Get all possible AI configurations in order of preference
+const getAIConfigs = (): AIConfig[] => {
+  const configs: AIConfig[] = [];
+
   if (process.env.GROQ_API_KEY) {
-    return {
+    configs.push({
       apiKey: process.env.GROQ_API_KEY,
       baseURL: 'https://api.groq.com/openai/v1',
       model: 'llama3-8b-8192',
       name: 'Groq',
       supports_json_mode: true
-    };
+    });
   }
+
   if (process.env.OPENROUTER_API_KEY) {
-    return {
+    configs.push({
       apiKey: process.env.OPENROUTER_API_KEY,
       baseURL: 'https://openrouter.ai/api/v1',
-      model: 'google/gemini-2.0-flash-lite-preview-02-05:free',
+      model: 'nvidia/nemotron-3-super-120b-a12b:free',
       name: 'OpenRouter',
-      // Some OpenRouter models (especially free/flash ones) might not strictly support response_format: { type: 'json_object' } 
-      // or require specific headers. We will handle headers in the constructor and 
-      // check for JSON mode support.
       supports_json_mode: false 
-    };
+    });
   }
+
   if (process.env.OPENAI_API_KEY) {
-    return {
+    configs.push({
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: undefined, // Default OpenAI base URL
       model: 'gpt-4o-mini',
       name: 'OpenAI',
       supports_json_mode: true
-    };
+    });
   }
-  return null;
+
+  return configs;
 };
-
-const aiConfig = getAIConfig();
-
-// Initialize OpenAI client with necessary OpenRouter headers if applicable
-const openai = new OpenAI({
-  apiKey: aiConfig?.apiKey || 'mock-key',
-  baseURL: aiConfig?.baseURL,
-  defaultHeaders: aiConfig?.name === 'OpenRouter' ? {
-    'HTTP-Referer': 'https://changelogify.soclarus.com', // Optional, for OpenRouter rankings
-    'X-Title': 'Changelogify', // Optional, for OpenRouter rankings
-  } : undefined,
-});
 
 export async function POST(req: Request) {
   try {
@@ -73,9 +71,21 @@ export async function POST(req: Request) {
       client_summary: ''
     };
 
-    // Attempt to generate summaries using the configured AI provider
-    if (aiConfig) {
+    const aiConfigs = getAIConfigs();
+    let success = false;
+    let lastUsedProvider = 'mock';
+
+    for (const config of aiConfigs) {
       try {
+        const openai = new OpenAI({
+          apiKey: config.apiKey,
+          baseURL: config.baseURL,
+          defaultHeaders: config.name === 'OpenRouter' ? {
+            'HTTP-Referer': 'https://changelogify.soclarus.com',
+            'X-Title': 'Changelogify',
+          } : undefined,
+        });
+
         const prompt = `
           You are a product manager assistant. I will provide you with a GitHub Pull Request title and description.
           Please generate two summaries:
@@ -93,31 +103,29 @@ export async function POST(req: Request) {
         `;
 
         const completion = await openai.chat.completions.create({
-          model: aiConfig.model,
+          model: config.model,
           messages: [
             { role: 'system', content: 'You are a helpful assistant that summarizes code changes and always responds in valid JSON.' },
             { role: 'user', content: prompt }
           ],
-          // Only use response_format if the provider explicitly supports it to avoid 400 errors
-          ...(aiConfig.supports_json_mode ? { response_format: { type: 'json_object' } } : {})
+          ...(config.supports_json_mode ? { response_format: { type: 'json_object' } } : {})
         });
 
         const content = completion.choices[0].message.content || '{}';
-        
-        // Robust JSON parsing: handle potential markdown blocks in non-JSON-mode responses
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         const jsonString = jsonMatch ? jsonMatch[0] : content;
         
         summaries = JSON.parse(jsonString);
+        success = true;
+        lastUsedProvider = config.name;
+        break; // Stop at the first successful provider
       } catch (aiError) {
-        console.error(`${aiConfig.name} Error, falling back to mock:`, aiError);
-        summaries = {
-          technical_summary: `Mock technical summary for: ${prTitle}. Details: ${prBody.substring(0, 100)}...`,
-          client_summary: `We improved the project by adding: ${prTitle}. This update makes the experience smoother for all users.`
-        };
+        console.error(`${config.name} Error, trying next provider...`, aiError);
       }
-    } else {
-      // Graceful fallback for testing without any API keys
+    }
+
+    // Final fallback to mock if no AI provider succeeded
+    if (!success) {
       summaries = {
         technical_summary: `[MOCK] Technical: ${prTitle}. PR #${pr.number} merged into main.`,
         client_summary: `[MOCK] Client: We added a new feature: ${prTitle}. Check it out!`
@@ -145,7 +153,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       message: 'Changelog processed successfully', 
       data, 
-      mode: aiConfig ? aiConfig.name : 'mock' 
+      mode: lastUsedProvider 
     });
   } catch (err: any) {
     console.error('Webhook Error:', err);
